@@ -1,27 +1,23 @@
 function Cinv = blkdiagPrior(prvec, priors, thetas, inds, rhoDC)
 % make block diagonal prior inverse covariance matrix
-% Cinv = AR1(prvec, priors, thetas, inds, rhoDC)
+% Cinv = blkdiagPrior(prvec, priors, thetas, inds, rhoDC)
 %
 % Make a block diagonal prior inverse covariance matrix to regularize
 % different sets of parameters separately
 %
 % Inputs:
-%   prvec  = [m x 1] vector of parameters
-%   priors = cell array of priors (eg. {@gpriors.AR1, @gpriors.ridge})
-%   thetas = cell array of hyper parameters (eg. {[10 .99], 10})
-%   inds   = cell array of parameter indices for each prior (eg. {1:10, 15:20})
+%   prvec  = [m x 1] weight vector
+%   priors = [k x 1] cell array of priors (eg. {@gpriors.AR1, @gpriors.ridge})
+%   thetas = [k x 1] cell array of hyper parameters (eg. {[10 .99], 10})
+%   inds   = [k x 1] cell array of parameter indices for each prior (eg. {1:10, 15:20})
 %   rhoDC  = [1 x 1] prior precision for the DC term (eg. .1)
 %
 % Outputs:
-%   Cinv [n x n] - inverse covariance matrix
+%   Cinv [m x m] - inverse covariance matrix
 %
 % example: 
 % Cinv = gpriors.blkdiagPrior(wts, {@gpriors.ridge, @gpriors.ridge}, {10, 10}, {1:floor(numel(wts)/2), ceil(numel(wts)/2):numel(wts)-1}, 0)
-% Inverse prior covariance matrix given by:
-%  C^-1 = rho/(1-a^2) [ 1 -a
-%                      -a 1+a^2 -a                       
-%                        .   .   .
-%                          -a 1+a^2 -a
+
 
 if nargin < 5
     DCflag = false;
