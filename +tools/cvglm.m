@@ -66,7 +66,7 @@ for kFold  = 1:nFolds
         lfpost = @(w)(neglogprior.posterior(w,foldm)); % posterior
         
         tic;
-        [wmap,nlogpost,H] = fminunc(lfpost,w0*.1,opts);
+        [wmap,nlogpost,~,~,~,H] = fminunc(lfpost,w0*.1,opts);
         toc
         
         testNegLogLikelihood = @(w) mstruct.neglogli(wmap, mstruct.liargs{1}(test,:), mstruct.liargs{2}(test), mstruct.liargs{3});

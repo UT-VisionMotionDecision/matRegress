@@ -25,7 +25,8 @@ plot(tt,wts,'k',tt,wls);
 
 
 %% Find ML estimate using fminunc
-lfunc = @(w)(neglogli.poisson(w,stim,y,fnlin)); % neglogli function handle
+
+lfunc = @(w)(glms.neglog.poisson(w,stim,y,fnlin)); % neglogli function handle
 
 opts = optimoptions(@fminunc,'Algorithm','trust-region',...
     'GradObj','on','Hessian','on');
@@ -38,16 +39,8 @@ tic;
 b = glmfit(stim, y, 'poisson');
 toc
 
-[B FitInfo] = lassoglm(stim,y,'poisson','CV',10,'Alpha', .2);
-
-plot(tt,wts,'k',tt,[wls,wml, b(2:end), B(:,FitInfo.IndexMinDeviance)]);
+plot(tt,wts,'k',tt,[wls,wml, b(2:end)]);
 legend({'true', 'wls', 'wml', 'b'})
-
-%%
-
-% Examine the cross-validation plot to see the effect of the Lambda regularization parameter.
-
-lassoPlot(B,FitInfo,'plottype','CV');
 
 
 
@@ -55,8 +48,11 @@ lassoPlot(B,FitInfo,'plottype','CV');
 smoothness = 1000;
 % shrinkage  = 100;
 
-mstruct.neglogli  = @neglogli.poisson; % neg log-likelihood function
-mstruct.neglogpr  = @neglogprior.gaussian_zero_mean_inv;
+import glms.neglog.*
+import gpriors.*
+
+mstruct.neglogli  = @poisson; % neg log-likelihood function
+mstruct.neglogpr  = @gaussian_zero_mean_inv;
 mstruct.liargs    = {stim,y,fnlin}; % args for likelihood function
 
 % % prior arguments
@@ -65,7 +61,7 @@ mstruct.liargs    = {stim,y,fnlin}; % args for likelihood function
 % mstruct.indices   = {1:15, 15:30};
 
 % prior arguments
-mstruct.priors    = {@gpriors.smooth};
+mstruct.priors    = {@pairwiseRidge};
 mstruct.hyprprs   = {smoothness};
 mstruct.indices   = {1:nw};
 
@@ -88,11 +84,17 @@ legend('true','LS','ML','MAP');
 
 
 %% Search space of hyperparameters
+
+% fitGLM(mstruct,model, varargin)
+
+
+%%
+
 nFolds = 5;
 isRandomized = 1;
 folds = tools.xvalidationIdx(nstim, nFolds, isRandomized);
 % gridparams = {[1 10 100 1000 2000 5000 10000], [1 10 100 1000]};
-gridparams = {[1 10 100 1000 2000 5000 10000]};
+gridparams = {[0 1 10 100 1000 2000 5000 10000]};
 
 [wmaps model] = tools.cvglm(mstruct, folds, gridparams);
 

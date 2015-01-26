@@ -1,4 +1,4 @@
-function [L,dL,ddL] = bernoulli(wts,X,Y)
+function [L,dL,ddL] = bernoulli(wts,X,Y, indices)
 % [L,dL,ddL] = bernoulli(wts,X,Y)
 %
 % Compute negative log-likelihood of data under logistic regression model,
@@ -9,21 +9,25 @@ function [L,dL,ddL] = bernoulli(wts,X,Y)
 %   X [N x m] - regressors
 %   Y [N x 1] - output (binary vector of 1s and 0s).
 
-xproj = X*wts;
+if nargin < 4
+    indices = 1:numel(Y);
+end
+
+xproj = X(indices,:)*wts;
 
 if nargout <= 1
-    L = -Y'*xproj + sum(softrect(xproj)); % neg log-likelihood
+    L = -Y(indices)'*xproj + sum(softrect(xproj)); % neg log-likelihood
 
 elseif nargout == 2
     [f,df] = softrect(xproj); % evaluate log-normalizer
-    L = -Y'*xproj + sum(f); % neg log-likelihood
-    dL = X'*(df-Y);         % gradient
+    L = -Y(indices)'*xproj + sum(f); % neg log-likelihood
+    dL = X(indices,:)'*(df-Y(indices));         % gradient
 
 elseif nargout == 3
     [f,df,ddf] = softrect(xproj); % evaluate log-normalizer
-    L = -Y'*xproj + sum(f); % neg log-likelihood
-    dL = X'*(df-Y);         % gradient
-    ddL = X'*bsxfun(@times,X,ddf); % Hessian
+    L = -Y(indices)'*xproj + sum(f); % neg log-likelihood
+    dL = X(indices,:)'*(df-Y(indices));         % gradient
+    ddL = X(indices,:)'*bsxfun(@times,X(indices,:),ddf); % Hessian
 end
 
 % -------------------------------------------------------------

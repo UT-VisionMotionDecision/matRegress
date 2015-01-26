@@ -1,4 +1,4 @@
-function Cinv = AR1_2D(prvec,theta,nyx,rhoDC)
+function Cinv = AR1_2D(theta,nyx)
 % Gaussian 2D AR1 inverse covariance matrix
 % Cinv = AR1_2D(theta,nyx)
 %
@@ -20,15 +20,8 @@ function Cinv = AR1_2D(prvec,theta,nyx,rhoDC)
 
 MINVAL = 1e-6;
 
-nprs = length(prvec);
 nim = prod(nyx);
-DCflag = 0;
-if nprs>nim
-    DCflag = 1;
-    if nargin<4
-	rhoDC = .1;
-    end
-end
+
 rho = max(theta(1),MINVAL);
 aa = min(theta(2),1-MINVAL);
 
@@ -44,8 +37,3 @@ Cinv2 = -spdiags([voffdiag,vdiag,voffdiag],-1:1,nyx(2),nyx(2));
 
 % Full inverse covariance matrix on linear weights
 Cinv = -kron(Cinv2,Cinv1)*(rho/(1-aa^2)^2);
-
-% Add prior indep prior variance on DC coeff
-if DCflag
-    Cinv = blkdiag(Cinv,-rhoDC);
-end
