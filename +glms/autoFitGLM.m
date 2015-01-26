@@ -10,6 +10,8 @@ function model = autoFitGLM(X,Y, prspec, varargin)
 % 		Likelihood distribution: 'poisson' or 'bernoulli'
 % 'CV'
 % 		Number of folds: 10 (default) 
+% 'link'
+
 
 
 dcTerm = range(X)==0;
