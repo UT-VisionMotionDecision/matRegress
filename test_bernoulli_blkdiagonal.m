@@ -1,17 +1,223 @@
+% matRegress will fit GLMS with different regularization for parameter
+% groups
 
-% 1.  Set up simulated example
+% There are two forms this can take
+%
+% 1. is the same regularization across multiple covariates, but with a
+% separation between them. This is important for smoothing. We might expect
+% weights to be smooth across for the response to the targets and the
+% choices, but we don't want to smooth between the targets and choices.
+%
+% 2. regularization is different for the different covariates. For example,
+% we might want different amounds of smoothness for the stimulus and the
+% spike history. The stimulus is probably very smooth, but the spike
+% history is not. Some of this can be imposed by the selection of basis
+% funcitons, but it would be nice to have the option to learn different
+% hyperparameters for the different types of covariate.
 
-% set up filter
-nw = 50; % number of coeffs in filter
+% This sample code will learn the hyper parameters for logistic regression
+% weights for different inputs. The covariates are based on the gabor-pulse
+% experiment, but the number of stimulus covariates can be 
+
+% build covariates
+nTrials = 700;
+nStim   = 70;
+nStep   = 3;
+
+kParam = 1;
+% Stimulus Covariates -- this mimics the stimulus for the gabor pulse
+% experiment. Smooth across these weights..
+covariates(kParam).label = 'pulses';
+covariates(kParam).desc  = 'Motion Pulses';
+covariates(kParam).X     = round(randn(nTrials, nStim));
+covariates(kParam).edim  = size(covariates(kParam).X, 2);
+covariates(kParam).prior = 'pairwiseDiff';
+
+kParam = kParam + 1;
+% History terms - choice and stimulus. Use a ridge prior for these weights
+covariates(kParam).label = 'choiceHistory';
+covariates(kParam).desc  = 'Previous Trial Choices';
+covariates(kParam).X     = sign(randn(nTrials, nStep));
+covariates(kParam).edim  = size(covariates(kParam).X, 2);
+covariates(kParam).prior = 'Ridge';
+% History terms - choice and stimulus. Use a ridge prior for these weights
+kParam = kParam + 1;
+covariates(kParam).label = 'stimHistory';
+covariates(kParam).desc  = 'Previous Trial Directions';
+covariates(kParam).X     = sign(randn(nTrials, nStep));
+covariates(kParam).edim  = size(covariates(kParam).X, 2);
+covariates(kParam).prior = 'Ridge';
+
+
+% set up filter - this is bull shit right now. Just makes a gaussian over
+% all the weights. TODO: make this more plausible
+nw = sum([covariates(:).edim]); % number of coeffs in filter
 wts = 3*normpdf(1:nw,nw/2,sqrt(nw)/2)';  % linear filter
 b = -1; % constant (DC term)
 
 % Make stimuli & simulate response
-nstim = 2000;
-stim = 1*(randn(nstim,nw));
-xproj = stim*wts+b;
+Xdesign = [covariates(:).X];
+xproj = Xdesign*wts+b;
 pp = logsig(xproj);
-yy = rand(nstim,1)<pp;
+Y = rand(nTrials,1)<pp;
+
+% -- make plot ---
+tt = 1:nw;
+figure(1); clf
+subplot(212);
+plot(tt,wts,'k');
+title('true filter');
+subplot(211);
+xpl = min(xproj):.1:max(xproj);
+plot(xproj,yy,'.',xpl,logistic(xpl), 'k');
+xlabel('input'); ylabel('response');
+fprintf('mean rate = %.1f (%d ones)\n', sum(yy)/nTrials, sum(yy));
+
+errfun = @(w)(norm(w-wts).^2);
+%% setup prior specs
+% prior specs is a struct array of the different types of regularization
+% that will be used
+clear prspec
+
+prspec = gpriors.getPriorStruct(unique({covariates(:).prior}));
+% name the priors
+prspec(1).desc = 'pairwise Difference';
+prspec(2).desc = 'Ridge gaussian prior';
+
+%% get posterior weights for fixed hyperparameters
+% get indices for each covariate
+prior_inds = tools.count2inds([covariates(:).edim]);
+prior_grp  = grp2idx({covariates(:).prior}); % TODO: match to label
+
+hyperParameters = [0 0];
+Cinv = glms.buildPriorCovariance(prspec, prior_inds, prior_grp, hyperParameters);
+
+tic
+[wml, SDebars, S] = glms.getPosteriorWeights(Xdesign,Y,Cinv, options.distr);
+toc
+
+figure(1); clf
+plot(1:numel(wts), wts, 'k'); hold on
+errorbar(1:numel(wml), norm(wts)*(wml/norm(wml)), norm(wts)*(SDebars/norm(wml)))
+
+
+
+
+%% build options for fitting
+options.ngridpoints = 10;
+options.distr  = 'bernoulli';
+options.bulk   = false;
+options.kfolds = 10; 
+options.gridding = 'lhs'; %'uniform'
+
+
+% get indices for each covariate
+prior_inds = tools.count2inds([covariates(:).edim]);
+prior_grp  = grp2idx({covariates(:).prior}); % TODO: match to label
+
+hyprange = reshape([prspec(:).hyprsRnge], [], 2)';
+hgrid = glms.makeHyperParameterGrid(hyprange, options.ngridpoints, options.gridding);
+
+%% 
+
+addpath(genpath('~/Dropbox/MatlabCode/download/gpml-matlab-v3.5-2014-12-08/'))
+addpath ~/code/gpao/
+S = glms.learnHyperParametersActiveLearning(Xdesign,Y,options.distr, prspec, prior_inds, prior_grp);
+
+
+%% grid to get best hyperparameters
+
+Sg = glms.hyperparameterGridSearch(Xdesign,Y, options.distr, prspec, prior_inds, prior_grp, 100);
+
+%%
+hyperParameters = S.hyprBin;
+Cinv = glms.buildPriorCovariance(prspec, prior_inds, prior_grp, hyperParameters);
+
+tic
+[wmap, SDebars] = glms.getPosteriorWeights(Xdesign,Y,Cinv, options.distr);
+toc
+
+hyperParameters = Sg.hyprBin;
+Cinv = glms.buildPriorCovariance(prspec, prior_inds, prior_grp, hyperParameters);
+
+tic
+[wmap2, SDebars2] = glms.getPosteriorWeights(Xdesign,Y,Cinv, options.distr);
+toc
+
+
+figure(1); clf
+plot(1:numel(wts), wts, 'k'); hold all
+errorbar(1:numel(wmap), norm(wts)*(wml/norm(wml)), norm(wts)*(SDebars/norm(wml)));
+errorbar(1:numel(wmap), norm(wts)*(wmap/norm(wmap)), norm(wts)*(SDebars/norm(wmap)));
+errorbar(1:numel(wmap), norm(wts)*(wmap2/norm(wmap2)), norm(wts)*(SDebars/norm(wmap2)));
+
+
+[errfun(wml) errfun(wmap) errfun(wmap2)]
+%%
+
+
+%%
+clear nll
+for ii = 1:options.ngridpoints
+    
+    hyperParameters = hgrid(ii,:);
+
+
+
+    Cinv = glms.buildPriorCovariance(prspec, prior_inds, prior_grp, hyperParameters);
+
+    tic
+    [wts, SDebars, S] = glms.getPosteriorWeights(X,Y,Cinv, options.distr, 'CV', 10, 'bulk', true);
+    toc
+
+nll{ii} = S.testLikelihood;
+end
+
+%%
+m = mean(cell2mat(nll));
+figure(1); clf
+
+xlin = linspace(prspec(1).hyprsRnge(1), prspec(1).hyprsRnge(2), 10);
+ylin = linspace(prspec(2).hyprsRnge(1), prspec(2).hyprsRnge(2), 10);
+% build a grid to interpolate over
+[X,Y] = meshgrid(xlin,ylin);
+f = scatteredInterpolant(hgrid(:,2),hgrid(:,1),m(:), 'natural');
+Z = f(X,Y);
+
+
+% NewCoords = [X(:) Y(:) Z(:)];
+% csvwrite('NewCoords.txt', NewCoords)
+
+figure(1); clf
+% subplot(121)
+% surf(X,Y,Z, Z,'CDataMapping','scaled', 'EdgeColor', 'k', 'FaceAlpha', 1); hold on
+plot3(hgrid(:,1),hgrid(:,2),m(:),'ok', 'MarkerFaceColor', 'k')
+% view(0,90)
+axis square
+colorbar
+title('Nancy Chamber')
+xlabel('grid x')
+ylabel('grid y')
+
+% subplot(122)
+% contourf(X,Y,Z); hold on; colormap jet
+% h = surf(X,Y,Z, Z,'CDataMapping','scaled', 'EdgeColor', 'k', 'FaceAlpha', .5); hold on;
+% plot3(x,y,z,'ok', 'MarkerFaceColor', 'k')
+%%
+plot3(hgrid(:,1), hgrid(:,2), m, 'o')
+%%
+reshape(m, ((hgrid), m, std(cell2mat(nll)), 'o-')
+hold on
+[mm, id] = min(m);
+plot(hgrid(id), mm, 'or')
+hold off
+%%
+figure(1); clf
+errorbar(1:numel(wts), wts, SDebars)
+%% get indices from size
+
+
+
 
 % -- make plot ---
 tt = 1:nw;
@@ -27,55 +233,4 @@ fprintf('mean rate = %.1f (%d ones)\n', sum(yy)/nstim, sum(yy));
 
 errfun = @(w)(norm(w-wts).^2);  % error function handle
 
-%% 2. Compute (standard) linear regression estimates
-xx = [stim, ones(nstim,1)];  % regressors
-
-% LS estimate
-wls = xx\yy;
-% MAP estimate
-lam = 10000; % ridge parameter
-wmap0 = (xx'*xx + lam*speye(nw+1))\(xx'*yy);
-
-subplot(212);
-plot(tt,wts,'k',tt,wls(1:nw)/norm(wls(1:nw))*norm(wts),...
-    tt,wmap0(1:nw)/norm(wmap0(1:nw))*norm(wts));
-legend('original', 'LS', 'ridge');
-
-%%
-
-smoothness = 5000;
-% shrinkage  = 100;
-
-mstruct.neglogli  = @neglogli.bernoulli; % neg log-likelihood function
-mstruct.neglogpr  = @neglogprior.gaussian_zero_mean_inv;
-mstruct.liargs    = {xx,yy}; % args for likelihood function
-
-% % prior arguments
-% mstruct.priors    = {@gpriors.smooth, @gpriors.ridge};
-% mstruct.hyprprs   = {smoothness, shrinkage};
-% mstruct.indices   = {1:15, 15:30};
-
-% prior arguments
-mstruct.priors    = {@gpriors.smooth};
-mstruct.hyprprs   = {smoothness};
-mstruct.indices   = {1:nw};
-
-Cinv = gpriors.blkdiagPrior(wls, mstruct.priors, mstruct.hyprprs, mstruct.indices);
-
-mstruct.priargs   = {Cinv}; % additional prior arguments
-
-
-lfpost = @(w)(neglogprior.posterior(w,mstruct)); % posterior
-HessCheck(lfpost,wls);  % check gradient & Hessian
-
-tic;
-[wmap,nlogpost,H] = fminunc(lfpost,wls*.1,opts);
-toc
-
-
-subplot(212);
-plot(tt,wts,'k', tt, wmap(1:nw));
-
-axis tight;
-legend('true','MAP');
 
