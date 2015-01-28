@@ -185,7 +185,7 @@ switch distr
             case {'canonical', 'log', 'exp'}
                 nlfun = @nlfuns.exp;
         end
-        fun = @(w,X,Y,inds) glms.neglog.poisson(wts,X,Y,nlfun, inds);
+        fun = @(w,X,Y,inds) glms.neglog.poisson(w,X,Y,nlfun, inds);
         
     case 'bernoulli'
         fun = @(w,X,Y,inds) glms.neglog.bernoulli(w,X,Y, inds);
