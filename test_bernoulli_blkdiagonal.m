@@ -39,14 +39,14 @@ covariates(kParam).label = 'choiceHistory';
 covariates(kParam).desc  = 'Previous Trial Choices';
 covariates(kParam).X     = sign(randn(nTrials, nStep));
 covariates(kParam).edim  = size(covariates(kParam).X, 2);
-covariates(kParam).prior = 'Ridge';
+covariates(kParam).prior = 'pairwiseDiff';
 % History terms - choice and stimulus. Use a ridge prior for these weights
 kParam = kParam + 1;
 covariates(kParam).label = 'stimHistory';
 covariates(kParam).desc  = 'Previous Trial Directions';
 covariates(kParam).X     = sign(randn(nTrials, nStep));
 covariates(kParam).edim  = size(covariates(kParam).X, 2);
-covariates(kParam).prior = 'Ridge';
+covariates(kParam).prior = 'pairwiseDiff';
 
 
 % set up filter - this is bull shit right now. Just makes a gaussian over
@@ -84,22 +84,28 @@ prspec = gpriors.getPriorStruct(unique({covariates(:).prior}));
 prspec(1).desc = 'pairwise Difference';
 prspec(2).desc = 'Ridge gaussian prior';
 
+%% Get regular old maximum likelihood by passing in 0 as the covariance matrix
+[wml, wmlerr] = glms.getPosteriorWeights(Xdesign,Y,0, options.distr);
+
+normweights = @(w) norm(wts)*(w/norm(w));
 %% get posterior weights for fixed hyperparameters
 % get indices for each covariate
 prior_inds = tools.count2inds([covariates(:).edim]);
 prior_grp  = grp2idx({covariates(:).prior}); % TODO: match to label
 
-hyperParameters = [0 0];
+hyperParameters = [500];
 Cinv = glms.buildPriorCovariance(prspec, prior_inds, prior_grp, hyperParameters);
 
 tic
-[wml, SDebars, S] = glms.getPosteriorWeights(Xdesign,Y,Cinv, options.distr);
+[wmap, SDebars] = glms.getPosteriorWeights(Xdesign,Y,Cinv, options.distr);
 toc
 
 figure(1); clf
-plot(1:numel(wts), wts, 'k'); hold on
-errorbar(1:numel(wml), norm(wts)*(wml/norm(wml)), norm(wts)*(SDebars/norm(wml)))
+plot(1:nw, [wts wml wmap]);
+legend({'true', 'ml', 'map'})   
+% errorbar(1:numel(wml), norm(wts)*(wml/norm(wml)), norm(wts)*(SDebars/norm(wml)))
 
+% normweights = @(w) norm(wts)*(w/norm(w))
 
 
 
@@ -115,7 +121,7 @@ options.gridding = 'lhs'; %'uniform'
 prior_inds = tools.count2inds([covariates(:).edim]);
 prior_grp  = grp2idx({covariates(:).prior}); % TODO: match to label
 
-hyprange = reshape([prspec(:).hyprsRnge], [], 2)';
+hyprange = reshape([prspec(:).hyprsRnge], 2, [])';
 hgrid = glms.makeHyperParameterGrid(hyprange, options.ngridpoints, options.gridding);
 
 %% 
@@ -146,91 +152,10 @@ toc
 
 
 figure(1); clf
-plot(1:numel(wts), wts, 'k'); hold all
-errorbar(1:numel(wmap), norm(wts)*(wml/norm(wml)), norm(wts)*(SDebars/norm(wml)));
-errorbar(1:numel(wmap), norm(wts)*(wmap/norm(wmap)), norm(wts)*(SDebars/norm(wmap)));
-errorbar(1:numel(wmap), norm(wts)*(wmap2/norm(wmap2)), norm(wts)*(SDebars/norm(wmap2)));
+plot(1:numel(wts), [wts wml wmap wmap2]);
+% errorbar(1:numel(wmap), norm(wts)*(wml/norm(wml)), norm(wts)*(SDebars/norm(wml)));
+% errorbar(1:numel(wmap), norm(wts)*(wmap/norm(wmap)), norm(wts)*(SDebars/norm(wmap)));
+% errorbar(1:numel(wmap), norm(wts)*(wmap2/norm(wmap2)), norm(wts)*(SDebars/norm(wmap2)));
 
 
 [errfun(wml) errfun(wmap) errfun(wmap2)]
-%%
-
-
-%%
-clear nll
-for ii = 1:options.ngridpoints
-    
-    hyperParameters = hgrid(ii,:);
-
-
-
-    Cinv = glms.buildPriorCovariance(prspec, prior_inds, prior_grp, hyperParameters);
-
-    tic
-    [wts, SDebars, S] = glms.getPosteriorWeights(X,Y,Cinv, options.distr, 'CV', 10, 'bulk', true);
-    toc
-
-nll{ii} = S.testLikelihood;
-end
-
-%%
-m = mean(cell2mat(nll));
-figure(1); clf
-
-xlin = linspace(prspec(1).hyprsRnge(1), prspec(1).hyprsRnge(2), 10);
-ylin = linspace(prspec(2).hyprsRnge(1), prspec(2).hyprsRnge(2), 10);
-% build a grid to interpolate over
-[X,Y] = meshgrid(xlin,ylin);
-f = scatteredInterpolant(hgrid(:,2),hgrid(:,1),m(:), 'natural');
-Z = f(X,Y);
-
-
-% NewCoords = [X(:) Y(:) Z(:)];
-% csvwrite('NewCoords.txt', NewCoords)
-
-figure(1); clf
-% subplot(121)
-% surf(X,Y,Z, Z,'CDataMapping','scaled', 'EdgeColor', 'k', 'FaceAlpha', 1); hold on
-plot3(hgrid(:,1),hgrid(:,2),m(:),'ok', 'MarkerFaceColor', 'k')
-% view(0,90)
-axis square
-colorbar
-title('Nancy Chamber')
-xlabel('grid x')
-ylabel('grid y')
-
-% subplot(122)
-% contourf(X,Y,Z); hold on; colormap jet
-% h = surf(X,Y,Z, Z,'CDataMapping','scaled', 'EdgeColor', 'k', 'FaceAlpha', .5); hold on;
-% plot3(x,y,z,'ok', 'MarkerFaceColor', 'k')
-%%
-plot3(hgrid(:,1), hgrid(:,2), m, 'o')
-%%
-reshape(m, ((hgrid), m, std(cell2mat(nll)), 'o-')
-hold on
-[mm, id] = min(m);
-plot(hgrid(id), mm, 'or')
-hold off
-%%
-figure(1); clf
-errorbar(1:numel(wts), wts, SDebars)
-%% get indices from size
-
-
-
-
-% -- make plot ---
-tt = 1:nw;
-figure(1); clf
-subplot(212);
-plot(tt,wts,'k');
-title('true filter');
-subplot(211);
-xpl = min(xproj):.1:max(xproj);
-plot(xproj,yy,'.',xpl,logistic(xpl), 'k');
-xlabel('input'); ylabel('response');
-fprintf('mean rate = %.1f (%d ones)\n', sum(yy)/nstim, sum(yy));
-
-errfun = @(w)(norm(w-wts).^2);  % error function handle
-
-
