@@ -1,5 +1,5 @@
 % set up filter
-nw = 100;
+nw = 400;
 wts = 2*normpdf(1:nw,nw/2,3)';
 fnlin = @nlfuns.exp;
 tt = 1:nw;
@@ -8,7 +8,7 @@ plot(tt,wts,'k');
 errfun = @(w)(norm(w-wts).^2);  % error function handle
 
 % Make stimuli & simulate response
-nstim = 400;
+nstim = 1400;
 stim = 1*(randn(nstim,nw));
 xproj = stim*wts;
 pp = fnlin(xproj);

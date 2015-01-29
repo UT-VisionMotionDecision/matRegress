@@ -69,7 +69,7 @@ plot(tt,wts,'k');
 title('true filter');
 subplot(211);
 xpl = min(xproj):.1:max(xproj);
-plot(xproj,yy,'.',xpl,logistic(xpl), 'k');
+plot(xproj,yy,'.',xpl,logsig(xpl), 'k');
 xlabel('input'); ylabel('response');
 fprintf('mean rate = %.1f (%d ones)\n', sum(yy)/nTrials, sum(yy));
 
@@ -85,7 +85,7 @@ prspec(1).desc = 'pairwise Difference';
 prspec(2).desc = 'Ridge gaussian prior';
 
 %% Get regular old maximum likelihood by passing in 0 as the covariance matrix
-[wml, wmlerr] = glms.getPosteriorWeights(Xdesign,Y,0, options.distr);
+[wml, wmlerr] = glms.getPosteriorWeights(Xdesign,Y,0, 'bernoulli');
 
 normweights = @(w) norm(wts)*(w/norm(w));
 %% get posterior weights for fixed hyperparameters
@@ -97,7 +97,7 @@ hyperParameters = [500];
 Cinv = glms.buildPriorCovariance(prspec, prior_inds, prior_grp, hyperParameters);
 
 tic
-[wmap, SDebars] = glms.getPosteriorWeights(Xdesign,Y,Cinv, options.distr);
+[wmap, SDebars] = glms.getPosteriorWeights(Xdesign,Y,Cinv, 'bernoulli');
 toc
 
 figure(1); clf
@@ -128,7 +128,7 @@ hgrid = glms.makeHyperParameterGrid(hyprange, options.ngridpoints, options.gridd
 
 addpath(genpath('~/Dropbox/MatlabCode/download/gpml-matlab-v3.5-2014-12-08/'))
 addpath ~/code/gpao/
-S = glms.learnHyperParametersActiveLearning(Xdesign,Y,options.distr, prspec, prior_inds, prior_grp);
+S = glms.learnHyperParametersActiveLearning(Xdesign,Y,options.distr, prspec, prior_inds, prior_grp, 'maxIter', 10);
 
 
 %% grid to get best hyperparameters
@@ -153,6 +153,7 @@ toc
 
 figure(1); clf
 plot(1:numel(wts), [wts wml wmap wmap2]);
+legend({'true', 'ml', 'gp', 'grid'})
 % errorbar(1:numel(wmap), norm(wts)*(wml/norm(wml)), norm(wts)*(SDebars/norm(wml)));
 % errorbar(1:numel(wmap), norm(wts)*(wmap/norm(wmap)), norm(wts)*(SDebars/norm(wmap)));
 % errorbar(1:numel(wmap), norm(wts)*(wmap2/norm(wmap2)), norm(wts)*(SDebars/norm(wmap2)));

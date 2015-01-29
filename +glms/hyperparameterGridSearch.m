@@ -20,6 +20,7 @@ obsX = glms.makeHyperParameterGrid(domain, nGrid, gridType);
 obsY = zeros(size(obsX, 1), 1);
 for k = 1:size(obsX, 1)
     obsY(k) = f(obsX(k, :));
+    fprintf('Function Evaluation: \t%d;  Value %d\n', k, obsY(k))
 end
 
 %% report what has been found
