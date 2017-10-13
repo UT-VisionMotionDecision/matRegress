@@ -1,6 +1,6 @@
-function [L,dL,H] = poisson(wts,x,y,fnlin, inds)
+function [L,dL,H] = poisson(wts,x,y,fnlin, inds, dtbin)
 % negative log-likelihood of data under Poisson model
-% [L,dL,ddL] = neglogli.poisson(wts,X,Y)
+% [L,dL,ddL] = neglogli.poisson(wts,X,Y, fnlin, inds, dtbin)
 %
 % Compute negative log-likelihood of data under Poisson regression model,
 % plus gradient and Hessian
@@ -15,6 +15,10 @@ function [L,dL,H] = poisson(wts,x,y,fnlin, inds)
 %   L [1 x 1] - negative log-likelihood
 %  dL [m x 1] - gradient
 % ddL [m x m] - Hessian
+if nargin < 6
+    dtbin=1;
+end
+
 if nargin < 5
     inds = 1:numel(y);
 end
@@ -24,17 +28,19 @@ xproj = x(inds,:)*wts;
 switch nargout
     case 1
         f = fnlin(xproj);
+        f=f.*dtbin;
         L = -y(inds)'*log(f) + sum(f); % neg log-likelihood
         L = full(L);
     case 2
         [f,df] = fnlin(xproj); % evaluate nonlinearity
-        
+        f=f.*dtbin;df=df.*dtbin;
         L = -y(inds)'*log(f) + sum(f); % neg log-likelihood
         L = full(L);
         dL = x(inds,:)'*((1 - y(inds)./f) .* df);
         dL = full(dL);
     case 3
         [f,df,ddf] = fnlin(xproj); % evaluate nonlinearity
+        f=f.*dtbin;df=df.*dtbin;ddf=ddf.*dtbin;
         
         L = -y(inds)'*log(f) + sum(f); % neg log-likelihood
         yf = y(inds)./f;

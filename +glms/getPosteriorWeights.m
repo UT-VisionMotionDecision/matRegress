@@ -11,11 +11,16 @@ end
 opts = optimoptions(@fminunc, 'Display', 'off', 'Algorithm','trust-region',...
     'GradObj','on','Hessian','on');
 
-argOpts  = {'link', 'CV', 'bulk', 'opts', 'DC'};
-dfltOpts = {'canonical', false, false, opts, true};
+argOpts  = {'link', 'CV', 'bulk', 'opts', 'DC', 'nlinConstraint'};
+dfltOpts = {'canonical', false, false, opts, true, []};
 si = [argOpts; dfltOpts];
 options = struct(si{:});
 options = parseArgs(options, varargin);
+
+if ~isempty(options.nlinConstraint)
+    opts = optimset('display', 'iter', 'gradobj', 'on', 'largescale', 'off', ...
+    'maxfunevals', 200000, 'maxiter', 200, 'algorithm', 'Active-Set');
+end
 
 if options.CV > 0
     cvfolds = cvpartition(numel(Y), 'KFold', options.CV);
@@ -34,7 +39,13 @@ if exist('cvfolds', 'var')
         fmfunc = @(w) bulkPosterior(w, lfunc, X, Y, Cinv, cvfolds);
         
         % do minimization
-        [wts, funval, ~,~,~,H] = fminunc(fmfunc, w0, options.opts);
+        if ~isempty(options.nlinConstraint)
+            Aeq = zeros(1,size(w0,1));
+            Beq = 0;
+            [wts, funval, ~, ~, ~, ~, H] = fmincon(fmfunc, w0, [],[],Aeq,Beq,[],[], @NormEq1, opts);
+        else
+            [wts, funval, ~,~,~,H] = fminunc(fmfunc, w0, options.opts);
+        end
         SDebars = zeros(size(wts));
         cinds = count2inds(repmat(size(wts,1), cvfolds.NumTestSets,1)');
         testfun = getLikelihoodFunctionHandle(distr, options);
@@ -66,7 +77,13 @@ else
     w0 = initializeLeastSquares(X,Y,Cinv);
     % do minimization
     tic
-    [wts, funval, ~,~,~,H] = fminunc(fmfunc, w0, options.opts);
+    if ~isempty(options.nlinConstraint)
+        Aeq = w0';
+        Beq = 0;
+        [wts, funval, ~, ~, ~, ~, H] = fmincon(fmfunc, w0, [],[],Aeq,Beq,[],[], @NormEq1, opts);
+    else
+        [wts, funval, ~,~,~,H] = fminunc(fmfunc, w0, options.opts);
+    end
     toc
     SDebars = sqrt(diag(inv(H)));
     
@@ -204,6 +221,23 @@ else
         w0(:,kk) = (X(cvfolds.training(kk),:)'*X(cvfolds.training(kk),:) + Cinv)\(X(cvfolds.training(kk),:)'*Y(cvfolds.training(kk)));
     end
 end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% nonlinear constraint norm
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [c,ceq,dc,dceq] = NormEq1(x, varargin)
+% [c,ceq] = NormEq1(x, varargin);
+%
+% nonlinear function for implementing the constraint norm(x) = 1;
+
+c = [];
+ceq = x'*x-1;
+
+if nargout>2
+    dc = [];
+    dceq = 2*x;
+end
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %       Counts to indices
